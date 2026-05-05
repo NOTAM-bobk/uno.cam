@@ -1,1 +1,625 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Monochrome Blind Camera</title>
+    <link rel="manifest" id="manifest-link">
+    <meta name="theme-color" content="#ffffff" id="meta-theme-color">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" id="apple-touch-icon">
 
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CSS Variables for Theming */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --border-color: #000000;
+            --glass-bg: rgba(255, 255, 255, 0.6);
+            --element-bg: #ffffff;
+            --shadow-color: rgba(0, 0, 0, 1);
+            --danger: #ef4444;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #ffffff;
+            --border-color: #ffffff;
+            --glass-bg: rgba(0, 0, 0, 0.6);
+            --element-bg: #2a2a2a;
+            --shadow-color: rgba(255, 255, 255, 1);
+            --danger: #dc2626;
+        }
+
+        [data-theme="retro"] {
+            --bg-color: #B4E4FF;
+            --text-color: #000000;
+            --border-color: #000000;
+            --glass-bg: rgba(255, 255, 255, 0.4);
+            --element-bg: #FFDE59;
+            --shadow-color: rgba(0, 0, 0, 1);
+            --danger: #FF3131;
+        }
+
+        /* Theming utilities mapped to CSS variables */
+        .theme-bg { background-color: var(--bg-color); }
+        .theme-text { color: var(--text-color); }
+        .theme-border { border-color: var(--border-color); }
+        .theme-element { background-color: var(--element-bg); }
+        .theme-shadow { box-shadow: 4px 4px 0px 0px var(--shadow-color); }
+        .theme-shadow-lg { box-shadow: 8px 8px 0px 0px var(--shadow-color); }
+        .theme-shadow-sm { box-shadow: 2px 2px 0px 0px var(--shadow-color); }
+        .theme-danger { background-color: var(--danger); }
+
+        /* Liquid Glass Effect */
+        .liquid-glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px) saturate(160%);
+            -webkit-backdrop-filter: blur(12px) saturate(160%);
+            border: 1px solid rgba(128, 128, 128, 0.2);
+        }
+
+        /* View Transitions */
+        .view-container {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .view-hidden {
+            opacity: 0;
+            transform: translateY(10px);
+            pointer-events: none;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Flash animation */
+        @keyframes flash {
+            0% { opacity: 1; background-color: var(--text-color); }
+            100% { opacity: 0; background-color: transparent; }
+        }
+        .flash-effect { animation: flash 0.4s ease-out; pointer-events: none; }
+
+        /* Record blink */
+        @keyframes blink { 50% { opacity: 0.3; } }
+        .recording-blink { animation: blink 1s infinite; }
+        
+        #hidden-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; z-index: -1; }
+
+        .gallery-blurred .media-thumb { filter: blur(12px); transition: filter 0.3s ease; }
+        .gallery-unblurred .media-thumb { filter: blur(0px); transition: filter 0.3s ease; }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); border-left: 2px solid var(--border-color); }
+        ::-webkit-scrollbar-thumb { background: var(--text-color); }
+    </style>
+</head>
+<body class="theme-bg theme-text h-[100dvh] w-screen flex flex-col font-sans overflow-hidden transition-colors duration-300">
+
+    <!-- Screen Flash Overlay -->
+    <div id="flash-overlay" class="fixed inset-0 z-50 opacity-0 pointer-events-none"></div>
+
+    <!-- Liquid Glass Nav Bar -->
+    <nav class="absolute top-4 left-1/2 -translate-x-1/2 z-40 liquid-glass rounded-full flex justify-between p-1 w-11/12 max-w-sm">
+        <button id="nav-camera" class="nav-tab flex-1 py-1 px-2 theme-element border theme-border rounded-full font-bold text-xs theme-shadow-sm transition-all theme-text">
+            CAM
+        </button>
+        <button id="nav-video" class="nav-tab flex-1 py-1 px-2 rounded-full font-bold text-xs opacity-60 hover:opacity-100 transition-all theme-text">
+            VID
+        </button>
+        <button id="nav-gallery" class="nav-tab flex-1 py-1 px-2 rounded-full font-bold text-xs opacity-60 hover:opacity-100 transition-all theme-text">
+            STASH
+        </button>
+        <button id="nav-settings" class="nav-tab flex-1 py-1 px-2 rounded-full font-bold text-xs opacity-60 hover:opacity-100 transition-all theme-text flex justify-center items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+    </nav>
+
+    <!-- Status Message -->
+    <div id="status-message" class="absolute top-20 left-1/2 -translate-x-1/2 text-xs font-bold border-2 theme-border theme-element px-4 py-1 theme-shadow hidden z-50 whitespace-nowrap transition-opacity theme-text">
+        Initializing...
+    </div>
+
+    <div class="relative flex-1 w-full h-full overflow-hidden mt-16">
+        
+        <!-- ================= VIEW: CAMERA & VIDEO ================= -->
+        <main id="capture-view" class="view-container flex flex-col items-center justify-center absolute inset-0 z-10 pt-4">
+            
+            <div class="flex gap-4 mb-8">
+                <button id="tool-timer" class="flex flex-col items-center justify-center w-12 h-12 theme-element border-2 theme-border theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-bold text-[10px] theme-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span id="timer-label">OFF</span>
+                </button>
+                <button id="tool-burst" class="flex flex-col items-center justify-center w-12 h-12 theme-element border-2 theme-border theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-bold text-[10px] theme-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M7 3v18"/><path d="M17 3v18"/></svg>
+                    <span id="burst-label">1X</span>
+                </button>
+                <button id="tool-torch" class="flex flex-col items-center justify-center w-12 h-12 theme-element border-2 theme-border theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-bold text-[10px] theme-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-1"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span id="torch-label">OFF</span>
+                </button>
+            </div>
+
+            <div class="flex flex-col items-center gap-8 mt-2">
+                <button id="switch-camera-btn" class="group flex items-center justify-center w-14 h-14 theme-element border-4 theme-border rounded-full theme-shadow active:translate-x-1 active:translate-y-1 active:shadow-none transition-all focus:outline-none theme-text" aria-label="Switch Camera">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="group-active:rotate-180 transition-transform duration-300">
+                        <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/><path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/><circle cx="12" cy="12" r="3"/><path d="m18 22-3-3 3-3"/><path d="m6 2 3 3-3 3"/>
+                    </svg>
+                </button>
+
+                <button id="capture-btn" class="w-32 h-32 theme-element border-[6px] theme-border rounded-full theme-shadow-lg active:translate-x-2 active:translate-y-2 active:shadow-none transition-all focus:outline-none flex items-center justify-center relative" aria-label="Capture">
+                    <div id="capture-inner" class="w-24 h-24 theme-text bg-current rounded-full transition-all duration-300"></div>
+                    <div id="timer-display" class="absolute inset-0 flex items-center justify-center text-white font-black text-4xl hidden pointer-events-none drop-shadow-md">3</div>
+                </button>
+            </div>
+            
+            <p id="capture-hint" class="mt-8 font-black opacity-60 tracking-widest uppercase text-sm theme-text text-center px-4">
+                Tap to Snap <br> <span class="text-xs opacity-70">(Double-Tap anywhere or hit Spacebar for quick capture)</span>
+            </p>
+        </main>
+
+        <!-- ================= VIEW: GALLERY ================= -->
+        <section id="gallery-view" class="view-container view-hidden flex flex-col z-20 absolute inset-0 theme-bg">
+            <div class="pb-4 px-6 border-b-4 theme-border flex flex-col gap-4 mt-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-black text-2xl uppercase tracking-wider theme-text">Vault</h2>
+                    <div class="flex gap-2">
+                        <label for="import-input" class="cursor-pointer theme-element border-2 theme-border px-3 py-1 font-bold text-xs theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center gap-1 theme-text">
+                            ADD
+                        </label>
+                        <input type="file" id="import-input" class="hidden" accept="image/*,video/*" multiple>
+                        <button id="toggle-blur-btn" class="theme-text border-2 theme-border px-3 py-1 font-bold text-xs theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center gap-1" style="background: var(--text-color); color: var(--bg-color)">
+                            <span id="blur-btn-text">UNBLUR</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4">
+                <div id="gallery-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4 gallery-blurred pb-20">
+                    <div id="empty-state" class="col-span-full text-center font-bold border-4 theme-border border-dashed p-8 theme-element opacity-50 theme-text">
+                        NO MEDIA YET
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW: SETTINGS ================= -->
+        <section id="settings-view" class="view-container view-hidden flex flex-col z-20 absolute inset-0 theme-bg p-6 overflow-y-auto pb-24">
+            <h2 class="font-black text-2xl uppercase tracking-wider theme-text mb-6 mt-4">Settings</h2>
+            
+            <div class="space-y-6">
+                <!-- Theme Selector -->
+                <div class="theme-element border-2 theme-border p-4 theme-shadow-sm">
+                    <h3 class="font-bold theme-text mb-3 uppercase tracking-wide text-sm">Theme</h3>
+                    <div class="flex gap-2">
+                        <button class="theme-btn flex-1 py-2 border-2 theme-border font-bold text-xs transition-transform active:scale-95 bg-white text-black" data-set-theme="light">LIGHT</button>
+                        <button class="theme-btn flex-1 py-2 border-2 theme-border font-bold text-xs transition-transform active:scale-95 bg-[#1a1a1a] text-white" data-set-theme="dark">DARK</button>
+                        <button class="theme-btn flex-1 py-2 border-2 theme-border font-bold text-xs transition-transform active:scale-95 bg-[#B4E4FF] text-black" data-set-theme="retro">RETRO</button>
+                    </div>
+                </div>
+
+                <!-- Flash Toggle -->
+                <div class="theme-element border-2 theme-border p-4 theme-shadow-sm flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold theme-text uppercase tracking-wide text-sm">Visual Flash Effect</h3>
+                        <p class="text-xs opacity-70 theme-text">Screen flashes white on photo capture</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="setting-flash" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none border-2 theme-border rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--text-color)]"></div>
+                    </label>
+                </div>
+
+                <!-- Cloudflare Sync Settings -->
+                <div class="theme-element border-2 theme-border p-4 theme-shadow-sm space-y-4">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold theme-text uppercase tracking-wide text-sm">Cloudflare Backup</h3>
+                            <p class="text-xs opacity-70 theme-text">Auto-save to your free Cloudflare Worker</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="setting-cloud" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none border-2 theme-border rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--text-color)]"></div>
+                        </label>
+                    </div>
+                    <div id="cloud-url-container" class="hidden flex-col gap-2">
+                        <label class="text-xs font-bold theme-text">WORKER URL:</label>
+                        <input type="url" id="setting-worker-url" placeholder="https://my-worker.username.workers.dev" class="w-full p-2 border-2 theme-border bg-transparent theme-text text-sm focus:outline-none focus:ring-2 focus:ring-current">
+                        <p class="text-[10px] opacity-70 theme-text">Read the setup instructions provided to get this URL.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Fullscreen Media Modal -->
+    <div id="media-modal" class="fixed inset-0 z-50 theme-bg hidden flex-col view-container view-hidden">
+        <div class="flex justify-between items-center p-3 border-b-4 theme-border" style="background: var(--glass-bg); backdrop-filter: blur(10px);">
+            <button id="close-modal-btn" class="border-2 theme-border theme-element theme-text p-2 font-bold theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none text-xs">
+                BACK
+            </button>
+            <div class="flex gap-2">
+                <button id="modal-share-btn" class="border-2 theme-border theme-element theme-text p-2 font-bold theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none text-xs hidden sm:flex">
+                    SHARE
+                </button>
+                <a id="modal-download-btn" href="#" download class="border-2 theme-border theme-element theme-text p-2 font-bold theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none text-xs">
+                    SAVE
+                </a>
+                <button id="modal-delete-btn" class="theme-danger text-white border-2 theme-border p-2 font-bold theme-shadow-sm active:translate-x-1 active:translate-y-1 active:shadow-none text-xs">
+                    DELETE
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 flex items-center justify-center p-4 relative" id="modal-content" style="background: rgba(0,0,0,0.1);">
+            <!-- Image or Video injected here -->
+        </div>
+    </div>
+
+    <!-- Hidden elements for camera processing -->
+    <video id="hidden-video" autoplay playsinline muted></video>
+    <canvas id="hidden-canvas" class="hidden"></canvas>
+
+    <script>
+        // --- PWA Setup ---
+        const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="white"/><path d="M100 150h60l20-40h150l20 40h60a30 30 0 0130 30v200a30 30 0 01-30 30H100a30 30 0 01-30-30V180a30 30 0 0130-30zm156 220a80 80 0 100-160 80 80 0 000 160z" fill="black"/><circle cx="256" cy="290" r="50" fill="white"/></svg>`;
+        const iconDataUrl = `data:image/svg+xml;base64,${btoa(svgIcon)}`;
+        const manifest = { name: "Blind Camera", short_name: "BlindCam", start_url: location.href, display: "standalone", background_color: "#ffffff", theme_color: "#ffffff", icons: [{ src: iconDataUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }] };
+        document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: 'application/json'}));
+        document.getElementById('apple-touch-icon').href = iconDataUrl;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // UI Elements
+            const video = document.getElementById('hidden-video');
+            const canvas = document.getElementById('hidden-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            const views = {
+                camera: document.getElementById('capture-view'),
+                gallery: document.getElementById('gallery-view'),
+                settings: document.getElementById('settings-view')
+            };
+
+            // Buttons & Inputs
+            const captureBtn = document.getElementById('capture-btn');
+            const captureInner = document.getElementById('capture-inner');
+            const switchBtn = document.getElementById('switch-camera-btn');
+            const toggleBlurBtn = document.getElementById('toggle-blur-btn');
+            const captureHint = document.getElementById('capture-hint');
+            const flashOverlay = document.getElementById('flash-overlay');
+            const statusMessage = document.getElementById('status-message');
+            
+            // Settings Elements
+            const settingFlash = document.getElementById('setting-flash');
+            const settingCloud = document.getElementById('setting-cloud');
+            const cloudUrlContainer = document.getElementById('cloud-url-container');
+            const settingWorkerUrl = document.getElementById('setting-worker-url');
+            const themeBtns = document.querySelectorAll('.theme-btn');
+
+            // State & Preferences
+            let currentStream = null;
+            let facingMode = 'environment';
+            let mediaItems = []; 
+            let isBlurred = true;
+            let appMode = 'camera'; 
+            let isRecording = false;
+            let mediaRecorder = null;
+            let recordedChunks = [];
+            let timerSetting = 0, burstSetting = 1, torchOn = false, isProcessingCapture = false;
+
+            // Load Settings from LocalStorage
+            let prefs = {
+                flashEnabled: localStorage.getItem('pref_flash') !== 'false',
+                cloudSync: localStorage.getItem('pref_cloud') === 'true',
+                workerUrl: localStorage.getItem('pref_worker') || '',
+                theme: localStorage.getItem('pref_theme') || 'light'
+            };
+
+            // Apply loaded settings
+            settingFlash.checked = prefs.flashEnabled;
+            settingCloud.checked = prefs.cloudSync;
+            settingWorkerUrl.value = prefs.workerUrl;
+            if(prefs.cloudSync) cloudUrlContainer.classList.remove('hidden');
+            cloudUrlContainer.classList.add('flex');
+            setTheme(prefs.theme);
+
+            // Audio/Haptic
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            function playBeep(freq = 600, duration = 100, type = 'sine') {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type; osc.frequency.value = freq;
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration/1000);
+                osc.stop(audioCtx.currentTime + duration/1000);
+            }
+            function triggerHaptic(duration = 50) { if (navigator.vibrate) navigator.vibrate(duration); }
+
+            // --- Theming & Settings Logic ---
+            function setTheme(themeName) {
+                document.documentElement.setAttribute('data-theme', themeName);
+                prefs.theme = themeName;
+                localStorage.setItem('pref_theme', themeName);
+                
+                // Update meta theme color
+                const colors = { 'light': '#ffffff', 'dark': '#1a1a1a', 'retro': '#B4E4FF' };
+                document.getElementById('meta-theme-color').content = colors[themeName] || '#ffffff';
+            }
+
+            themeBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => setTheme(e.target.dataset.setTheme));
+            });
+
+            settingFlash.addEventListener('change', (e) => {
+                prefs.flashEnabled = e.target.checked;
+                localStorage.setItem('pref_flash', prefs.flashEnabled);
+            });
+
+            settingCloud.addEventListener('change', (e) => {
+                prefs.cloudSync = e.target.checked;
+                localStorage.setItem('pref_cloud', prefs.cloudSync);
+                if(prefs.cloudSync) cloudUrlContainer.classList.remove('hidden');
+                else cloudUrlContainer.classList.add('hidden');
+            });
+
+            settingWorkerUrl.addEventListener('change', (e) => {
+                prefs.workerUrl = e.target.value;
+                localStorage.setItem('pref_worker', prefs.workerUrl);
+            });
+
+            // Cloudflare Upload Logic
+            async function uploadToCloudflare(dataUrl) {
+                if (!prefs.cloudSync) return;
+                if (!prefs.workerUrl || !prefs.workerUrl.startsWith('http')) {
+                    return showStatus("INVALID WORKER URL", true);
+                }
+                showStatus("UPLOADING TO CLOUD...");
+                try {
+                    // Send Base64 payload to Cloudflare Worker
+                    const res = await fetch(prefs.workerUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: dataUrl })
+                    });
+                    if (res.ok) showStatus("CLOUD SYNCED ✓");
+                    else throw new Error('Upload failed');
+                } catch (err) {
+                    console.error(err);
+                    showStatus("CLOUD SYNC FAILED", true);
+                }
+            }
+
+            // --- Navigation Logic (With Animations) ---
+            function switchMode(newMode) {
+                if(isProcessingCapture || isRecording) return showStatus("BUSY...", true);
+                
+                // Update Nav Buttons
+                document.querySelectorAll('.nav-tab').forEach(tab => {
+                    const idMap = { 'camera': 'nav-camera', 'video': 'nav-video', 'gallery': 'nav-gallery', 'settings': 'nav-settings' };
+                    if(tab.id === idMap[newMode]) {
+                        tab.className = `nav-tab flex-1 py-1 px-2 theme-element border theme-border rounded-full font-bold text-xs theme-shadow-sm transition-all theme-text ${newMode==='settings' ? 'flex justify-center items-center' : ''}`;
+                    } else {
+                        tab.className = `nav-tab flex-1 py-1 px-2 rounded-full font-bold text-xs opacity-60 hover:opacity-100 transition-all theme-text ${tab.id==='nav-settings' ? 'flex justify-center items-center' : ''}`;
+                    }
+                });
+
+                // Transition Views
+                Object.keys(views).forEach(key => {
+                    if (key === newMode) {
+                        views[key].classList.remove('view-hidden');
+                        if(key === 'gallery') renderGallery();
+                    } else {
+                        views[key].classList.add('view-hidden');
+                    }
+                });
+
+                appMode = newMode;
+
+                // Handle Camera states
+                if (newMode === 'camera' || newMode === 'video') {
+                    if (newMode === 'video') {
+                        document.getElementById('capture-hint').innerHTML = "Tap to Record";
+                        startCamera(true);
+                    } else {
+                        document.getElementById('capture-hint').innerHTML = "Tap to Snap";
+                        startCamera(false);
+                    }
+                    updateCaptureInnerStyle();
+                }
+            }
+
+            document.getElementById('nav-camera').addEventListener('click', () => switchMode('camera'));
+            document.getElementById('nav-video').addEventListener('click', () => switchMode('video'));
+            document.getElementById('nav-gallery').addEventListener('click', () => switchMode('gallery'));
+            document.getElementById('nav-settings').addEventListener('click', () => switchMode('settings'));
+
+            function showStatus(msg, isError = false) {
+                statusMessage.textContent = msg;
+                statusMessage.classList.remove('hidden', 'opacity-0');
+                if (isError) {
+                    statusMessage.style.backgroundColor = 'var(--danger)';
+                    statusMessage.style.color = '#fff';
+                } else {
+                    statusMessage.style.backgroundColor = 'var(--element-bg)';
+                    statusMessage.style.color = 'var(--text-color)';
+                }
+                setTimeout(() => { statusMessage.classList.add('opacity-0'); }, 1500);
+                setTimeout(() => { if(statusMessage.classList.contains('opacity-0')) statusMessage.classList.add('hidden'); }, 1800);
+            }
+
+            async function startCamera(needAudio = false) {
+                if (currentStream) currentStream.getTracks().forEach(track => track.stop());
+                try {
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                        audio: needAudio
+                    });
+                    video.srcObject = currentStream;
+                    await video.play();
+                } catch (err) { showStatus("ACCESS DENIED", true); }
+            }
+
+            // Fast Capture (Double Tap anywhere in view, except buttons)
+            views.camera.addEventListener('dblclick', (e) => {
+                if(e.target.tagName !== 'BUTTON' && e.target.closest('button') === null) {
+                    executeCaptureSequence();
+                }
+            });
+
+            // Fast Capture (Keyboard shortcuts)
+            document.addEventListener('keydown', (e) => {
+                if ((e.code === 'Space' || e.key === 'Enter') && (appMode === 'camera' || appMode === 'video')) {
+                    e.preventDefault(); // Prevent scrolling
+                    executeCaptureSequence();
+                }
+            });
+
+            async function executeCaptureSequence() {
+                if (!currentStream || !video.videoWidth) return showStatus("NOT READY", true);
+                isProcessingCapture = true;
+
+                if (appMode === 'camera') {
+                    for (let b = 0; b < burstSetting; b++) {
+                        if (b > 0) await new Promise(r => setTimeout(r, 300)); 
+                        playBeep(1200, 150, 'square'); 
+                        triggerHaptic([50, 50]);
+                        
+                        if (prefs.flashEnabled) {
+                            flashOverlay.classList.remove('flash-effect');
+                            void flashOverlay.offsetWidth; 
+                            flashOverlay.classList.add('flash-effect');
+                        }
+
+                        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+                        if (facingMode === 'user') { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        if (facingMode === 'user') ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                        mediaItems.unshift({ type: 'image', src: dataUrl, id: Date.now() + b });
+                        
+                        // Fire off async cloud upload
+                        uploadToCloudflare(dataUrl);
+                    }
+                    showStatus(burstSetting > 1 ? "BURST SAVED" : "PHOTO SAVED");
+                    isProcessingCapture = false;
+                } else {
+                    if (isRecording) stopRecording();
+                    else startRecording();
+                    isProcessingCapture = false;
+                }
+            }
+
+            function startRecording() {
+                recordedChunks = [];
+                mediaRecorder = new MediaRecorder(currentStream);
+                mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+                mediaRecorder.onstop = () => {
+                    const url = URL.createObjectURL(new Blob(recordedChunks, { type: 'video/webm' }));
+                    mediaItems.unshift({ type: 'video', src: url, id: Date.now() });
+                    showStatus("VIDEO SAVED");
+                    playBeep(400, 300); triggerHaptic([100, 100]);
+                };
+                mediaRecorder.start();
+                isRecording = true;
+                playBeep(1000, 300); triggerHaptic([100]);
+                updateCaptureInnerStyle();
+            }
+
+            function stopRecording() {
+                if(mediaRecorder && isRecording) {
+                    mediaRecorder.stop();
+                    isRecording = false;
+                    updateCaptureInnerStyle();
+                }
+            }
+
+            captureBtn.addEventListener('click', executeCaptureSequence);
+            switchBtn.addEventListener('click', () => {
+                if(isRecording || isProcessingCapture) return;
+                facingMode = facingMode === 'environment' ? 'user' : 'environment';
+                triggerHaptic(30);
+                startCamera(appMode === 'video');
+            });
+
+            // Tools (Timer, Burst, Torch) functionality preserved...
+            document.getElementById('tool-timer').addEventListener('click', function() {
+                timerSetting = timerSetting === 0 ? 3 : (timerSetting === 3 ? 10 : 0);
+                document.getElementById('timer-label').textContent = timerSetting === 0 ? 'OFF' : `${timerSetting}S`;
+                if(timerSetting > 0) { this.style.backgroundColor = 'var(--text-color)'; this.style.color = 'var(--bg-color)'; }
+                else { this.style.backgroundColor = 'var(--element-bg)'; this.style.color = 'var(--text-color)'; }
+            });
+            document.getElementById('tool-burst').addEventListener('click', function() {
+                burstSetting = burstSetting === 1 ? 3 : 1;
+                document.getElementById('burst-label').textContent = `${burstSetting}X`;
+                if(burstSetting > 1) { this.style.backgroundColor = 'var(--text-color)'; this.style.color = 'var(--bg-color)'; }
+                else { this.style.backgroundColor = 'var(--element-bg)'; this.style.color = 'var(--text-color)'; }
+            });
+
+            // Gallery Rendering
+            const galleryGrid = document.getElementById('gallery-grid');
+            const emptyState = document.getElementById('empty-state');
+            const mediaModal = document.getElementById('media-modal');
+            const modalContent = document.getElementById('modal-content');
+            let currentModalItemId = null;
+
+            function openModal(item) {
+                currentModalItemId = item.id;
+                modalContent.innerHTML = '';
+                document.getElementById('modal-download-btn').href = item.src;
+                document.getElementById('modal-download-btn').download = item.type === 'video' ? `vid-${item.id}.webm` : `img-${item.id}.jpg`;
+                
+                if(item.type === 'image') {
+                    const img = document.createElement('img'); img.src = item.src;
+                    img.className = "max-w-full max-h-full object-contain border-4 theme-border theme-shadow-lg theme-element";
+                    modalContent.appendChild(img);
+                }
+                mediaModal.classList.remove('view-hidden');
+            }
+
+            document.getElementById('close-modal-btn').addEventListener('click', () => {
+                mediaModal.classList.add('view-hidden');
+                modalContent.innerHTML = '';
+            });
+
+            toggleBlurBtn.addEventListener('click', () => {
+                isBlurred = !isBlurred;
+                if (isBlurred) {
+                    galleryGrid.classList.add('gallery-blurred');
+                    galleryGrid.classList.remove('gallery-unblurred');
+                    document.getElementById('blur-btn-text').textContent = 'UNBLUR';
+                } else {
+                    galleryGrid.classList.remove('gallery-blurred');
+                    galleryGrid.classList.add('gallery-unblurred');
+                    document.getElementById('blur-btn-text').textContent = 'BLUR';
+                }
+            });
+
+            function renderGallery() {
+                if (mediaItems.length === 0) {
+                    emptyState.style.display = 'block';
+                    galleryGrid.innerHTML = '';
+                    galleryGrid.appendChild(emptyState);
+                    return;
+                }
+                emptyState.style.display = 'none';
+                galleryGrid.innerHTML = '';
+                mediaItems.forEach((item) => {
+                    const container = document.createElement('div');
+                    container.className = 'aspect-square border-4 theme-border theme-shadow theme-element overflow-hidden relative flex flex-col cursor-pointer transition-transform active:scale-95';
+                    container.onclick = () => openModal(item);
+                    
+                    if (item.type === 'image') {
+                        container.innerHTML = `<img src="${item.src}" class="media-thumb w-full h-full object-cover">`;
+                    }
+                    galleryGrid.appendChild(container);
+                });
+            }
+
+            startCamera();
+        });
+    </script>
+</body>
+</html>
